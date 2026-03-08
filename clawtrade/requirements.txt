@@ -1,0 +1,9 @@
+flask==3.1.*
+requests==2.32.*
+python-dotenv==1.1.*
+gunicorn==23.*
+urllib3>=2.0
+
+# Broker SDKs (only the chosen broker's SDK is used at runtime)
+longport
+tigeropen

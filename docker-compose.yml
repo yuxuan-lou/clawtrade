@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  # IBKR-only: Java gateway + IBeam authenticator (activated with --profile ibkr)
+  ibkr-gateway:
+    profiles: ["ibkr"]
+    build:
+      context: ./gateways/ibkr
+      dockerfile: Dockerfile
+    container_name: ibkr-gateway
+    env_file: .env
+    networks:
+      - clawtrade-internal
+    volumes:
+      - ibkr-data:/opt/gateway/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:5000/v1/api/iserver/auth/status"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  clawtrade:
+    build:
+      context: ./clawtrade
+      dockerfile: Dockerfile
+    container_name: clawtrade
+    env_file: .env
+    environment:
+      - CLAWTRADE_SECRET=${CLAWTRADE_SECRET}
+      - BROKER_TYPE=${BROKER_TYPE:-ibkr}
+      - IBKR_GATEWAY_URL=https://ibkr-gateway:5000
+    ports:
+      - "127.0.0.1:5100:5100"
+    networks:
+      - clawtrade-internal
+    volumes:
+      - clawtrade-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5100/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  clawtrade-internal:
+    driver: bridge
+
+volumes:
+  ibkr-data:
+  clawtrade-logs:
