@@ -51,26 +51,26 @@ ClawTrade takes a fundamentally different approach:
 You (WhatsApp / Telegram / WebChat)
         │
         ▼
-┌────────────────────────┐
-│  OpenClaw Gateway       │  Runs on the host
-│  + ClawTrade Skill      │
-└────────┬───────────────┘
-         │  HTTP → localhost:5100
-         ▼
-┌─────────────────────────────────────────────┐
-│  Docker                                      │
-│  ┌───────────────────┐  ┌─────────────────┐ │
-│  │  ClawTrade         │  │  IBKR Gateway   │ │
-│  │  (Python/Flask)    │←→│  (IBKR only)    │ │
-│  │  Port 5100         │  │  Port 5000      │ │
-│  │                    │  │  (container only)│ │
-│  │  • Broker adapter  │  └─────────────────┘ │
-│  │  • Guardrails      │                      │
-│  │  • Confirmation    │  Alpaca / Longbridge  │
-│  │    queue           │  / Tiger: direct API  │
-│  │  • Audit log       │  (no gateway needed)  │
-│  └───────────────────┘                      │
-└─────────────────────────────────────────────┘
+┌───────────────────────────┐
+│  OpenClaw Gateway         │  Runs on the host
+│  + ClawTrade Skill        │
+└────────────┬──────────────┘
+             │  HTTP → localhost:5100
+             ▼
+┌──────────────────────────────────────────────────┐
+│  Docker                                          │
+│  ┌──────────────────────┐  ┌───────────────────┐ │
+│  │  ClawTrade           │  │  IBKR Gateway     │ │
+│  │  (Python/Flask)      │←→│  (IBKR only)      │ │
+│  │  Port 5100           │  │  Port 5000        │ │
+│  │                      │  │  (container only) │ │
+│  │  • Broker adapter    │  └───────────────────┘ │
+│  │  • Guardrails        │                        │
+│  │  • Confirmation      │  Alpaca / Longbridge   │
+│  │    queue             │  / Tiger: direct API   │
+│  │  • Audit log         │  (no gateway needed)   │
+│  └──────────────────────┘                        │
+└──────────────────────────────────────────────────┘
 ```
 
 ---
@@ -80,7 +80,7 @@ You (WhatsApp / Telegram / WebChat)
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/clawtrade.git
+git clone https://github.com/yuxuan-lou/clawtrade.git
 cd clawtrade
 ```
 
@@ -330,3 +330,9 @@ clawtrade/
 ## License
 
 MIT
+
+---
+
+## About the Author
+
+Built by [Yuxuan Lou](https://yuxuanlou.info) — visit for more projects and writing.
