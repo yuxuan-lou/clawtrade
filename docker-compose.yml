@@ -13,6 +13,7 @@ services:
       - clawtrade-internal
     volumes:
       - ibkr-data:/opt/gateway/data
+      - ${SECRETS_DIR:-./.secrets}:/run/clawtrade-secrets:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-skf", "https://localhost:5000/v1/api/iserver/auth/status"]
@@ -27,7 +28,6 @@ services:
     container_name: clawtrade
     env_file: .env
     environment:
-      - CLAWTRADE_SECRET=${CLAWTRADE_SECRET}
       - BROKER_TYPE=${BROKER_TYPE:-ibkr}
       - IBKR_GATEWAY_URL=https://ibkr-gateway:5000
     ports:
@@ -36,6 +36,7 @@ services:
       - clawtrade-internal
     volumes:
       - clawtrade-logs:/app/logs
+      - ${SECRETS_DIR:-./.secrets}:/run/clawtrade-secrets:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5100/api/health"]

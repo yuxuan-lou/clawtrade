@@ -102,6 +102,8 @@ cd clawtrade
 4. 构建 Docker 镜像并启动服务
 5. （可选）自动安装 OpenClaw Skill 并更新 `~/.openclaw/openclaw.json`
 
+默认情况下，安装脚本会将敏感凭证写入宿主机 `~/.clawtrade/secrets`（目录权限 `700`，文件权限 `600`）；`.env` 仅保存非敏感配置和 `*_FILE` 引用。
+
 > **IBKR 用户：** 首次启动需要在 2 分钟内在手机 IBKR Key 上确认推送通知。
 
 ### 3. 验证部署
@@ -112,7 +114,7 @@ curl http://localhost:5100/api/health
 # 预期: {"status":"ok","service":"clawtrade","broker":"ibkr"}
 
 # 认证检查（需要密钥）
-CT_SECRET=$(grep CLAWTRADE_SECRET .env | cut -d= -f2)
+CT_SECRET=$(cat ~/.clawtrade/secrets/clawtrade_secret)
 curl -H "X-ClawTrade-Token: $CT_SECRET" http://localhost:5100/api/status
 ```
 
@@ -262,7 +264,7 @@ docker compose exec clawtrade cat /app/logs/clawtrade_audit.jsonl
 
 ## 从 Paper Trading 切换到 Live
 
-1. 更新 `.env` 中的券商凭证为真实账户
+1. 更新 `~/.clawtrade/secrets` 中的券商凭证为真实账户
 2. 降低护栏参数（编辑 `clawtrade/config.py`）：
 
 ```python
@@ -297,8 +299,9 @@ CONFIRM_THRESHOLD_USD = 200
 **Q: ClawTrade 密钥泄露了怎么办？**
 1. `docker compose down`
 2. 生成新密钥：`openssl rand -hex 32`
-3. 更新 `.env` 和 `~/.openclaw/openclaw.json` 中的密钥
-4. `docker compose up -d`
+3. 用新密钥覆盖 `~/.clawtrade/secrets/clawtrade_secret`
+4. 如果你手动配置过 `skills.entries.clawtrade.env.CLAWTRADE_SECRET`，同步更新 `~/.openclaw/openclaw.json`
+5. `docker compose up -d`
 
 **Q: 哪些券商支持 A 股交易？**
 长桥和老虎证券都通过沪港通/深港通支持 A 股。IBKR 也提供部分港股和上海上市证券的交易通道。

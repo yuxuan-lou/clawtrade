@@ -17,7 +17,7 @@ Usage: ./install.sh [options]
 Options:
   --openclaw-only, --openclaw-skill-only
       Configure OpenClaw Skill only (no broker prompts, no Docker build/start).
-      Requires existing .env with CLAWTRADE_SECRET.
+      Requires existing .env with CLAWTRADE_SECRET or CLAWTRADE_SECRET_FILE.
   -h, --help
       Show this help.
 EOF
@@ -97,15 +97,15 @@ if [ "$L" = "zh" ]; then
     M_TIGER_RSA="粘贴你的 RSA 私钥（以空行结束）:"
     M_CT_SECRET="ClawTrade API 密钥（留空自动生成）: "
     M_CT_GENERATED="已生成 ClawTrade API 密钥。"
-    M_CONFIG_SAVED="配置已写入 .env（权限 600）"
+    M_CONFIG_SAVED="配置已写入 .env；敏感凭证已写入本机 secrets 目录（权限 700/600）"
     M_BUILDING="正在构建 Docker 镜像..."
     M_STARTING_IBKR="正在启动服务（含 IBKR Gateway）..."
     M_STARTING="正在启动 ClawTrade..."
     M_COMPLETE="===== 安装完成 ====="
     M_RUNNING="ClawTrade 运行于: http://localhost:5100"
     M_BROKER_LABEL="券商: "
-    M_YOUR_KEY="你的 ClawTrade API 密钥（配置 OpenClaw 时需要）:"
-    M_SAVE_KEY="请保存此密钥，后续配置 OpenClaw Skill 时需要使用。"
+    M_YOUR_KEY="ClawTrade API 密钥文件:"
+    M_SAVE_KEY="如需手动配置 OpenClaw，可读取该文件内容作为 CLAWTRADE_SECRET。"
     M_IBKR_2FA="⚠️  IBKR: 请在手机 IBKR Key 上确认推送通知！\n   查看认证日志: docker compose logs -f ibkr-gateway"
     M_NEXT="下一步: 配置 OpenClaw Skill（见 README.zh-CN.md）"
     M_OC_FOUND="检测到 OpenClaw。"
@@ -125,7 +125,7 @@ if [ "$L" = "zh" ]; then
     M_OC_NOT_READY="OpenClaw Skill 还未就绪。请运行: openclaw skills check"
     M_OC_ONLY_MODE="仅执行 OpenClaw Skill 配置模式（不修改 Docker 服务）。"
     M_OC_ONLY_ENV_MISSING="未找到 .env，请先完成一次完整安装。"
-    M_OC_ONLY_SECRET_MISSING=".env 中缺少 CLAWTRADE_SECRET，无法继续。"
+    M_OC_ONLY_SECRET_MISSING=".env 中缺少 CLAWTRADE_SECRET 或 CLAWTRADE_SECRET_FILE，无法继续。"
     M_OC_ONLY_DONE="OpenClaw Skill 配置流程完成。"
 else
     M_TITLE="===== ClawTrade Setup Wizard ====="
@@ -170,15 +170,15 @@ else
     M_TIGER_RSA="Paste your RSA private key (end with an empty line):"
     M_CT_SECRET="ClawTrade API Key (leave empty to auto-generate): "
     M_CT_GENERATED="ClawTrade API key has been generated."
-    M_CONFIG_SAVED="Configuration saved to .env (permissions 600)"
+    M_CONFIG_SAVED="Configuration saved to .env; sensitive credentials saved to local secrets files (permissions 700/600)."
     M_BUILDING="Building Docker images..."
     M_STARTING_IBKR="Starting services (with IBKR Gateway)..."
     M_STARTING="Starting ClawTrade..."
     M_COMPLETE="===== Setup Complete ====="
     M_RUNNING="ClawTrade is running at: http://localhost:5100"
     M_BROKER_LABEL="Broker: "
-    M_YOUR_KEY="Your ClawTrade API key (needed for OpenClaw configuration):"
-    M_SAVE_KEY="Please save this key — you will need it when configuring the OpenClaw Skill."
+    M_YOUR_KEY="ClawTrade API key file:"
+    M_SAVE_KEY="If needed for manual OpenClaw setup, read this file value as CLAWTRADE_SECRET."
     M_IBKR_2FA="⚠️  IBKR: Confirm the push notification on your IBKR Key mobile app!\n   View authentication logs: docker compose logs -f ibkr-gateway"
     M_NEXT="Next step: Configure the OpenClaw Skill (see README.md)"
     M_OC_FOUND="OpenClaw detected."
@@ -198,7 +198,7 @@ else
     M_OC_NOT_READY="OpenClaw Skill is not ready yet. Run: openclaw skills check"
     M_OC_ONLY_MODE="OpenClaw Skill-only mode (Docker services are not modified)."
     M_OC_ONLY_ENV_MISSING=".env not found. Please complete a full install first."
-    M_OC_ONLY_SECRET_MISSING="CLAWTRADE_SECRET is missing in .env. Cannot continue."
+    M_OC_ONLY_SECRET_MISSING="CLAWTRADE_SECRET or CLAWTRADE_SECRET_FILE is missing in .env. Cannot continue."
     M_OC_ONLY_DONE="OpenClaw Skill setup flow completed."
 fi
 
@@ -214,6 +214,20 @@ echo ""
 # ---- Check prerequisites ----
 check_command() {
     command -v "$1" &> /dev/null
+}
+
+write_secret_file() {
+    local filename="$1"
+    local value="$2"
+    local path="${SECRETS_DIR}/${filename}"
+    umask 077
+    printf "%s" "$value" > "$path"
+    chmod 600 "$path"
+}
+
+read_env_value() {
+    local key="$1"
+    awk -F= -v k="$key" '$1==k { sub(/^[^=]*=/, ""); print; exit }' .env
 }
 
 verify_openclaw_skill_ready() {
@@ -297,7 +311,20 @@ if [ "$OPENCLAW_ONLY" = "1" ]; then
         exit 1
     fi
 
-    CLAWTRADE_SECRET=$(awk -F= '/^CLAWTRADE_SECRET=/{sub(/^CLAWTRADE_SECRET=/, ""); print; exit}' .env)
+    CLAWTRADE_SECRET_FILE="$(read_env_value "CLAWTRADE_SECRET_FILE")"
+    SECRETS_DIR_FROM_ENV="$(read_env_value "SECRETS_DIR")"
+    HOST_SECRET_FILE=""
+    if [ -n "$SECRETS_DIR_FROM_ENV" ]; then
+        HOST_SECRET_FILE="${SECRETS_DIR_FROM_ENV}/clawtrade_secret"
+    fi
+
+    if [ -n "$HOST_SECRET_FILE" ] && [ -f "$HOST_SECRET_FILE" ]; then
+        CLAWTRADE_SECRET="$(tr -d '\r' < "$HOST_SECRET_FILE")"
+    elif [ -n "$CLAWTRADE_SECRET_FILE" ] && [ -f "$CLAWTRADE_SECRET_FILE" ]; then
+        CLAWTRADE_SECRET="$(tr -d '\r' < "$CLAWTRADE_SECRET_FILE")"
+    else
+        CLAWTRADE_SECRET="$(read_env_value "CLAWTRADE_SECRET")"
+    fi
     if [ -z "$CLAWTRADE_SECRET" ]; then
         echo "$M_OC_ONLY_SECRET_MISSING"
         exit 1
@@ -373,6 +400,10 @@ echo "✓ Docker ${DOCKER_VER} $M_DETECTED"
 echo "✓ Docker Compose $M_DETECTED"
 echo ""
 
+SECRETS_DIR="${HOME}/.clawtrade/secrets"
+mkdir -p "$SECRETS_DIR"
+chmod 700 "$SECRETS_DIR"
+
 # ---- Broker selection ----
 echo "$M_SELECT_BROKER"
 echo "$M_BROKER_1"
@@ -401,14 +432,18 @@ case $BROKER_TYPE in
         echo ""
         read -p "$M_IBKR_USER" IBEAM_ACCOUNT
         read -sp "$M_IBKR_PASS" IBEAM_PASSWORD && echo
-        BROKER_VARS="IBEAM_ACCOUNT=${IBEAM_ACCOUNT}
-IBEAM_PASSWORD=${IBEAM_PASSWORD}"
+        write_secret_file "ibeam_account" "$IBEAM_ACCOUNT"
+        write_secret_file "ibeam_password" "$IBEAM_PASSWORD"
+        BROKER_VARS="IBEAM_ACCOUNT_FILE=/run/clawtrade-secrets/ibeam_account
+IBEAM_PASSWORD_FILE=/run/clawtrade-secrets/ibeam_password"
         ;;
     alpaca)
         echo "$M_ALPACA_KEYS"
         echo ""
         read -p "$M_ALPACA_KEY" ALPACA_API_KEY
         read -sp "$M_ALPACA_SECRET" ALPACA_SECRET_KEY && echo
+        write_secret_file "alpaca_api_key" "$ALPACA_API_KEY"
+        write_secret_file "alpaca_secret_key" "$ALPACA_SECRET_KEY"
         echo ""
         read -p "$M_ALPACA_PAPER" USE_PAPER
         if [[ "$USE_PAPER" =~ ^[Nn]$ ]]; then
@@ -416,8 +451,8 @@ IBEAM_PASSWORD=${IBEAM_PASSWORD}"
         else
             ALPACA_BASE_URL="https://paper-api.alpaca.markets"
         fi
-        BROKER_VARS="ALPACA_API_KEY=${ALPACA_API_KEY}
-ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY}
+        BROKER_VARS="ALPACA_API_KEY_FILE=/run/clawtrade-secrets/alpaca_api_key
+ALPACA_SECRET_KEY_FILE=/run/clawtrade-secrets/alpaca_secret_key
 ALPACA_BASE_URL=${ALPACA_BASE_URL}
 ALPACA_DATA_URL=https://data.alpaca.markets"
         ;;
@@ -427,9 +462,12 @@ ALPACA_DATA_URL=https://data.alpaca.markets"
         read -p "$M_LB_APP_KEY" LONGBRIDGE_APP_KEY
         read -sp "$M_LB_APP_SECRET" LONGBRIDGE_APP_SECRET && echo
         read -sp "$M_LB_TOKEN" LONGBRIDGE_ACCESS_TOKEN && echo
-        BROKER_VARS="LONGBRIDGE_APP_KEY=${LONGBRIDGE_APP_KEY}
-LONGBRIDGE_APP_SECRET=${LONGBRIDGE_APP_SECRET}
-LONGBRIDGE_ACCESS_TOKEN=${LONGBRIDGE_ACCESS_TOKEN}"
+        write_secret_file "longbridge_app_key" "$LONGBRIDGE_APP_KEY"
+        write_secret_file "longbridge_app_secret" "$LONGBRIDGE_APP_SECRET"
+        write_secret_file "longbridge_access_token" "$LONGBRIDGE_ACCESS_TOKEN"
+        BROKER_VARS="LONGBRIDGE_APP_KEY_FILE=/run/clawtrade-secrets/longbridge_app_key
+LONGBRIDGE_APP_SECRET_FILE=/run/clawtrade-secrets/longbridge_app_secret
+LONGBRIDGE_ACCESS_TOKEN_FILE=/run/clawtrade-secrets/longbridge_access_token"
         ;;
     tiger)
         echo "$M_TIGER_KEYS"
@@ -440,11 +478,13 @@ LONGBRIDGE_ACCESS_TOKEN=${LONGBRIDGE_ACCESS_TOKEN}"
         TIGER_PRIVATE_KEY=""
         while IFS= read -r line; do
             [[ -z "$line" ]] && break
-            TIGER_PRIVATE_KEY="${TIGER_PRIVATE_KEY}${line}\n"
+            TIGER_PRIVATE_KEY="${TIGER_PRIVATE_KEY}${line}"$'\n'
         done
-        BROKER_VARS="TIGER_ID=${TIGER_ID}
+        write_secret_file "tiger_id" "$TIGER_ID"
+        write_secret_file "tiger_private_key" "$TIGER_PRIVATE_KEY"
+        BROKER_VARS="TIGER_ID_FILE=/run/clawtrade-secrets/tiger_id
 TIGER_ACCOUNT=${TIGER_ACCOUNT}
-TIGER_PRIVATE_KEY=${TIGER_PRIVATE_KEY}"
+TIGER_PRIVATE_KEY_FILE=/run/clawtrade-secrets/tiger_private_key"
         ;;
 esac
 
@@ -458,10 +498,13 @@ if [ -z "$CLAWTRADE_SECRET" ]; then
     echo "$M_CT_GENERATED"
 fi
 
+write_secret_file "clawtrade_secret" "$CLAWTRADE_SECRET"
+
 # ---- Generate .env file ----
 cat > .env << EOF
 BROKER_TYPE=${BROKER_TYPE}
-CLAWTRADE_SECRET=${CLAWTRADE_SECRET}
+SECRETS_DIR=${SECRETS_DIR}
+CLAWTRADE_SECRET_FILE=/run/clawtrade-secrets/clawtrade_secret
 ${BROKER_VARS}
 EOF
 chmod 600 .env
@@ -492,7 +535,7 @@ echo "$M_RUNNING"
 echo "${M_BROKER_LABEL}${BROKER_TYPE}"
 echo ""
 echo "$M_YOUR_KEY"
-echo "  $CLAWTRADE_SECRET"
+echo "  ${SECRETS_DIR}/clawtrade_secret"
 echo ""
 echo "$M_SAVE_KEY"
 

@@ -103,6 +103,8 @@ The script will:
 4. Build Docker images and start services
 5. (Optional) Auto-install the OpenClaw Skill and update `~/.openclaw/openclaw.json`
 
+By default, credentials are stored in host secret files under `~/.clawtrade/secrets` (permission `700` for directory, `600` for files). `.env` stores only non-secret config and `*_FILE` references.
+
 > **IBKR users:** You must confirm the push notification on your IBKR Key mobile app within 2 minutes on first launch.
 
 ### 3. Verify deployment
@@ -113,7 +115,7 @@ curl http://localhost:5100/api/health
 # Expected: {"status":"ok","service":"clawtrade","broker":"ibkr"}
 
 # Auth check (key required)
-CT_SECRET=$(grep CLAWTRADE_SECRET .env | cut -d= -f2)
+CT_SECRET=$(cat ~/.clawtrade/secrets/clawtrade_secret)
 curl -H "X-ClawTrade-Token: $CT_SECRET" http://localhost:5100/api/status
 ```
 
@@ -262,7 +264,7 @@ docker compose exec clawtrade cat /app/logs/clawtrade_audit.jsonl
 
 ## Switching to Live Trading
 
-1. Update `.env` with your live broker credentials
+1. Update secret files in `~/.clawtrade/secrets` with your live broker credentials
 2. Lower the guardrails in `clawtrade/config.py`:
 
 ```python
@@ -297,8 +299,9 @@ Edit `clawtrade/config.py` and add `"OPT"` to the `ALLOWED_SEC_TYPES` list, then
 **Q: My ClawTrade API key was leaked. What do I do?**
 1. `docker compose down`
 2. Generate a new key: `openssl rand -hex 32`
-3. Update the key in both `.env` and `~/.openclaw/openclaw.json`
-4. `docker compose up -d`
+3. Replace `~/.clawtrade/secrets/clawtrade_secret` with the new key
+4. Update `~/.openclaw/openclaw.json` if you manually set `skills.entries.clawtrade.env.CLAWTRADE_SECRET`
+5. `docker compose up -d`
 
 **Q: Which brokers support China A-share trading?**
 Longbridge and Tiger Brokers both support China A-shares through the Stock Connect mechanism. IBKR also provides access to some Hong Kong and Shanghai-listed securities.

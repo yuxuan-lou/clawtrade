@@ -1,5 +1,6 @@
 .env
 .env.backup.*
+.secrets/
 *.pyc
 __pycache__/
 *.egg-info/

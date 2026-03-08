@@ -3,7 +3,6 @@ ClawTrade main service.
 Provides guardrail-protected REST API for AI agent consumption.
 Broker-agnostic: works with IBKR, Alpaca, Longbridge, and Tiger Brokers.
 """
-import os
 import sys
 from dataclasses import asdict
 from functools import wraps
@@ -19,7 +18,7 @@ import audit
 
 app = Flask(__name__)
 
-CLAWTRADE_SECRET = os.environ.get("CLAWTRADE_SECRET", "")
+CLAWTRADE_SECRET = config.CLAWTRADE_SECRET
 
 _broker = None
 

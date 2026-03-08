@@ -1,6 +1,18 @@
 #!/bin/bash
 set -e
 
+load_secret_file() {
+    local var_name="$1"
+    local file_var_name="${var_name}_FILE"
+    local file_path="${!file_var_name}"
+    if [ -n "$file_path" ] && [ -f "$file_path" ]; then
+        export "$var_name=$(tr -d '\r' < "$file_path")"
+    fi
+}
+
+load_secret_file "IBEAM_ACCOUNT"
+load_secret_file "IBEAM_PASSWORD"
+
 echo ">>> Starting virtual display..."
 Xvfb :99 -screen 0 1024x768x24 &
 export DISPLAY=:99
