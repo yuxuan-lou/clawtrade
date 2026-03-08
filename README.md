@@ -90,11 +90,18 @@ cd clawtrade
 ./install.sh
 ```
 
+If ClawTrade is already running and you only want to configure OpenClaw Skill:
+
+```bash
+./install.sh --openclaw-only
+```
+
 The script will:
 1. Ask you to **choose a broker** (IBKR, Alpaca, Longbridge, or Tiger)
 2. Collect broker-specific credentials
 3. Generate a ClawTrade API key
 4. Build Docker images and start services
+5. (Optional) Auto-install the OpenClaw Skill and update `~/.openclaw/openclaw.json`
 
 > **IBKR users:** You must confirm the push notification on your IBKR Key mobile app within 2 minutes on first launch.
 
@@ -111,6 +118,19 @@ curl -H "X-ClawTrade-Token: $CT_SECRET" http://localhost:5100/api/status
 ```
 
 ### 4. Configure OpenClaw Skill
+
+`install.sh` now prompts to configure OpenClaw automatically. If you choose **Yes**, it will:
+
+- Copy `openclaw-skill/SKILL.md` to `~/.openclaw/skills/clawtrade/SKILL.md`
+- Backup your existing `~/.openclaw/openclaw.json` (if present)
+- Set `skills.entries.clawtrade.enabled=true`
+- Set `skills.entries.clawtrade.env.CLAWTRADE_SECRET` to your generated key
+- Inject `CLAWTRADE_SECRET` into gateway runtime environment on restart (compatibility fallback)
+- Attempt to restart OpenClaw gateway
+
+Note: For most setups, skill-specific env (`skills.entries.clawtrade.env`) is sufficient. The installer also injects gateway runtime env as a compatibility fallback for environments that still require it.
+
+If you choose **No** (or auto-setup fails), use the manual steps below:
 
 ```bash
 mkdir -p ~/.openclaw/skills/clawtrade
@@ -224,7 +244,7 @@ docker compose down
 docker compose logs -f clawtrade
 
 # Re-authenticate IBKR (confirm on mobile)
-docker compose exec ibkr-gateway python3 -m ibeam --authenticate
+docker compose exec ibkr-gateway python3 -m ibeam.ibeam_starter --authenticate
 
 # View audit log
 docker compose exec clawtrade cat /app/logs/clawtrade_audit.jsonl
@@ -266,7 +286,7 @@ No. You only need to add one entry to `openclaw.json` under `skills.entries`. No
 It's recommended to disable other Skills that connect directly to your broker (e.g., an ibkr-trader Skill from ClawHub), to avoid bypassing ClawTrade's safety layer. But this is not mandatory — ClawTrade's security does not depend on it.
 
 **Q: IBKR Gateway authentication expired. What do I do?**
-Run `docker compose exec ibkr-gateway python3 -m ibeam --authenticate`, then confirm the push notification on your IBKR Key app. The keepalive script extends sessions, but re-authentication is typically needed every ~24 hours.
+Run `docker compose exec ibkr-gateway python3 -m ibeam.ibeam_starter --authenticate`, then confirm the push notification on your IBKR Key app. The keepalive script extends sessions, but re-authentication is typically needed every ~24 hours.
 
 **Q: How do I view all historical operations?**
 Run `docker compose exec clawtrade cat /app/logs/clawtrade_audit.jsonl`. Each line is a JSON object with timestamp, action, parameters, result, and whether it was blocked.

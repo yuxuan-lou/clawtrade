@@ -1,6 +1,33 @@
 #!/bin/bash
 set -e
 
+OPENCLAW_ONLY=0
+OPENCLAW_REQUIRED=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --openclaw-only|--openclaw-skill-only)
+            OPENCLAW_ONLY=1
+            OPENCLAW_REQUIRED=1
+            ;;
+        -h|--help)
+            cat <<'EOF'
+Usage: ./install.sh [options]
+
+Options:
+  --openclaw-only, --openclaw-skill-only
+      Configure OpenClaw Skill only (no broker prompts, no Docker build/start).
+      Requires existing .env with CLAWTRADE_SECRET.
+  -h, --help
+      Show this help.
+EOF
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
+
 # ============================================================
 # Language detection & message definitions
 # ============================================================
@@ -81,6 +108,25 @@ if [ "$L" = "zh" ]; then
     M_SAVE_KEY="请保存此密钥，后续配置 OpenClaw Skill 时需要使用。"
     M_IBKR_2FA="⚠️  IBKR: 请在手机 IBKR Key 上确认推送通知！\n   查看认证日志: docker compose logs -f ibkr-gateway"
     M_NEXT="下一步: 配置 OpenClaw Skill（见 README.zh-CN.md）"
+    M_OC_FOUND="检测到 OpenClaw。"
+    M_OC_SETUP_ASK="现在自动配置 OpenClaw Skill？[Y/n]: "
+    M_OC_SETUP_START="正在配置 OpenClaw Skill..."
+    M_OC_SETUP_SKIP="已跳过 OpenClaw Skill 自动配置。"
+    M_OC_NOT_FOUND="未检测到 openclaw 命令，跳过自动配置。"
+    M_OC_SKILL_INSTALLED="已安装 Skill 文件到: ~/.openclaw/skills/clawtrade/SKILL.md"
+    M_OC_CONFIG_BACKUP="已备份 OpenClaw 配置: "
+    M_OC_CONFIG_UPDATED="已更新 ~/.openclaw/openclaw.json 中的 skills.entries.clawtrade。"
+    M_OC_CONFIG_FAILED="自动写入 OpenClaw 配置失败，请按 README 手动配置。"
+    M_OC_RESTARTING="正在重启 OpenClaw Gateway..."
+    M_OC_RESTARTED="OpenClaw Gateway 重启完成。"
+    M_OC_RESTART_FAILED="自动重启失败，请手动执行: openclaw gateway restart"
+    M_OC_VERIFYING="正在检查 OpenClaw Skill 状态..."
+    M_OC_READY="OpenClaw Skill 检查通过：clawtrade 已就绪。"
+    M_OC_NOT_READY="OpenClaw Skill 还未就绪。请运行: openclaw skills check"
+    M_OC_ONLY_MODE="仅执行 OpenClaw Skill 配置模式（不修改 Docker 服务）。"
+    M_OC_ONLY_ENV_MISSING="未找到 .env，请先完成一次完整安装。"
+    M_OC_ONLY_SECRET_MISSING=".env 中缺少 CLAWTRADE_SECRET，无法继续。"
+    M_OC_ONLY_DONE="OpenClaw Skill 配置流程完成。"
 else
     M_TITLE="===== ClawTrade Setup Wizard ====="
     M_SUBTITLE="Secure AI trading middleware with guardrail protection."
@@ -135,6 +181,25 @@ else
     M_SAVE_KEY="Please save this key — you will need it when configuring the OpenClaw Skill."
     M_IBKR_2FA="⚠️  IBKR: Confirm the push notification on your IBKR Key mobile app!\n   View authentication logs: docker compose logs -f ibkr-gateway"
     M_NEXT="Next step: Configure the OpenClaw Skill (see README.md)"
+    M_OC_FOUND="OpenClaw detected."
+    M_OC_SETUP_ASK="Configure OpenClaw Skill automatically now? [Y/n]: "
+    M_OC_SETUP_START="Configuring OpenClaw Skill..."
+    M_OC_SETUP_SKIP="Skipped OpenClaw Skill auto-setup."
+    M_OC_NOT_FOUND="openclaw command not found. Skipping automatic setup."
+    M_OC_SKILL_INSTALLED="Installed Skill file at: ~/.openclaw/skills/clawtrade/SKILL.md"
+    M_OC_CONFIG_BACKUP="Backed up OpenClaw config to: "
+    M_OC_CONFIG_UPDATED="Updated skills.entries.clawtrade in ~/.openclaw/openclaw.json."
+    M_OC_CONFIG_FAILED="Failed to update OpenClaw config automatically. Please follow README manual steps."
+    M_OC_RESTARTING="Restarting OpenClaw Gateway..."
+    M_OC_RESTARTED="OpenClaw Gateway restarted."
+    M_OC_RESTART_FAILED="Could not restart automatically. Run: openclaw gateway restart"
+    M_OC_VERIFYING="Checking OpenClaw Skill status..."
+    M_OC_READY="OpenClaw Skill check passed: clawtrade is ready."
+    M_OC_NOT_READY="OpenClaw Skill is not ready yet. Run: openclaw skills check"
+    M_OC_ONLY_MODE="OpenClaw Skill-only mode (Docker services are not modified)."
+    M_OC_ONLY_ENV_MISSING=".env not found. Please complete a full install first."
+    M_OC_ONLY_SECRET_MISSING="CLAWTRADE_SECRET is missing in .env. Cannot continue."
+    M_OC_ONLY_DONE="OpenClaw Skill setup flow completed."
 fi
 
 # ============================================================
@@ -150,6 +215,98 @@ echo ""
 check_command() {
     command -v "$1" &> /dev/null
 }
+
+verify_openclaw_skill_ready() {
+    if ! check_command openclaw; then
+        echo "$M_OC_NOT_READY"
+        return
+    fi
+
+    echo "$M_OC_VERIFYING"
+    OC_CHECK_OUTPUT="$(openclaw skills check 2>/dev/null || true)"
+    OC_READY_BLOCK="$(printf "%s\n" "$OC_CHECK_OUTPUT" | awk '/Ready to use:/{flag=1;next}/Missing requirements:/{flag=0}flag')"
+
+    case "$OC_READY_BLOCK" in
+        *"clawtrade"*)
+            echo "$M_OC_READY"
+            ;;
+        *)
+            echo "$M_OC_NOT_READY"
+            ;;
+    esac
+}
+
+setup_openclaw_skill() {
+    if ! check_command openclaw; then
+        echo "$M_OC_NOT_FOUND"
+        if [ "$OPENCLAW_REQUIRED" = "1" ]; then
+            return 1
+        fi
+        return 0
+    fi
+
+    echo "$M_OC_FOUND"
+    if [ "$OPENCLAW_ONLY" != "1" ]; then
+        printf "%s" "$M_OC_SETUP_ASK"
+        read -r OC_SETUP_CHOICE
+        if [[ "$OC_SETUP_CHOICE" =~ ^[Nn]$ ]]; then
+            echo "$M_OC_SETUP_SKIP"
+            return 0
+        fi
+    fi
+
+    echo "$M_OC_SETUP_START"
+
+    OPENCLAW_DIR="${HOME}/.openclaw"
+    OPENCLAW_SKILL_DIR="${OPENCLAW_DIR}/skills/clawtrade"
+    OPENCLAW_CONFIG="${OPENCLAW_DIR}/openclaw.json"
+
+    mkdir -p "$OPENCLAW_SKILL_DIR"
+    cp openclaw-skill/SKILL.md "$OPENCLAW_SKILL_DIR/SKILL.md"
+    echo "$M_OC_SKILL_INSTALLED"
+
+    mkdir -p "$OPENCLAW_DIR"
+    if [ -f "$OPENCLAW_CONFIG" ]; then
+        OPENCLAW_BACKUP="${OPENCLAW_CONFIG}.bak.$(date +%F-%H%M%S)"
+        cp "$OPENCLAW_CONFIG" "$OPENCLAW_BACKUP"
+        echo "${M_OC_CONFIG_BACKUP}${OPENCLAW_BACKUP}"
+    fi
+
+    if openclaw config set skills.entries.clawtrade.enabled true --strict-json >/dev/null 2>&1 \
+        && openclaw config set skills.entries.clawtrade.env.CLAWTRADE_SECRET "\"${CLAWTRADE_SECRET}\"" --strict-json >/dev/null 2>&1; then
+        echo "$M_OC_CONFIG_UPDATED"
+    else
+        echo "$M_OC_CONFIG_FAILED"
+        return
+    fi
+
+    echo "$M_OC_RESTARTING"
+    if CLAWTRADE_SECRET="$CLAWTRADE_SECRET" openclaw gateway restart >/dev/null 2>&1; then
+        echo "$M_OC_RESTARTED"
+    else
+        echo "$M_OC_RESTART_FAILED"
+    fi
+
+    verify_openclaw_skill_ready
+}
+
+if [ "$OPENCLAW_ONLY" = "1" ]; then
+    echo "$M_OC_ONLY_MODE"
+    if [ ! -f ".env" ]; then
+        echo "$M_OC_ONLY_ENV_MISSING"
+        exit 1
+    fi
+
+    CLAWTRADE_SECRET=$(awk -F= '/^CLAWTRADE_SECRET=/{sub(/^CLAWTRADE_SECRET=/, ""); print; exit}' .env)
+    if [ -z "$CLAWTRADE_SECRET" ]; then
+        echo "$M_OC_ONLY_SECRET_MISSING"
+        exit 1
+    fi
+
+    setup_openclaw_skill
+    echo "$M_OC_ONLY_DONE"
+    exit 0
+fi
 
 if ! check_command docker; then
     echo "$M_DOCKER_MISSING"
@@ -338,6 +495,9 @@ echo "$M_YOUR_KEY"
 echo "  $CLAWTRADE_SECRET"
 echo ""
 echo "$M_SAVE_KEY"
+
+echo ""
+setup_openclaw_skill
 
 if [ "$BROKER_TYPE" = "ibkr" ]; then
     echo ""

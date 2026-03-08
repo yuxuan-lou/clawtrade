@@ -89,11 +89,18 @@ cd clawtrade
 ./install.sh
 ```
 
+如果 ClawTrade 已经在运行，只想配置 OpenClaw Skill，可执行：
+
+```bash
+./install.sh --openclaw-only
+```
+
 安装脚本会：
 1. 让你**选择券商**（IBKR、Alpaca、长桥或老虎证券）
 2. 收集对应的凭证信息
 3. 生成 ClawTrade API 密钥
 4. 构建 Docker 镜像并启动服务
+5. （可选）自动安装 OpenClaw Skill 并更新 `~/.openclaw/openclaw.json`
 
 > **IBKR 用户：** 首次启动需要在 2 分钟内在手机 IBKR Key 上确认推送通知。
 
@@ -110,6 +117,19 @@ curl -H "X-ClawTrade-Token: $CT_SECRET" http://localhost:5100/api/status
 ```
 
 ### 4. 配置 OpenClaw Skill
+
+`install.sh` 现在会提示是否自动配置 OpenClaw。选择 **Yes** 时，脚本会：
+
+- 复制 `openclaw-skill/SKILL.md` 到 `~/.openclaw/skills/clawtrade/SKILL.md`
+- 备份已有的 `~/.openclaw/openclaw.json`（如果存在）
+- 设置 `skills.entries.clawtrade.enabled=true`
+- 设置 `skills.entries.clawtrade.env.CLAWTRADE_SECRET` 为安装时生成的密钥
+- 在重启时注入 `CLAWTRADE_SECRET` 到 gateway 运行环境（兼容兜底）
+- 尝试重启 OpenClaw gateway
+
+说明：多数环境下只配置 skill 级别（`skills.entries.clawtrade.env`）即可。安装脚本同时会注入 gateway 运行环境，作为兼容兜底。
+
+如果你选择 **No**（或自动配置失败），请按下面手动步骤执行：
 
 ```bash
 mkdir -p ~/.openclaw/skills/clawtrade
@@ -224,7 +244,7 @@ docker compose down
 docker compose logs -f clawtrade
 
 # 重新认证 IBKR（需手机确认）
-docker compose exec ibkr-gateway python3 -m ibeam --authenticate
+docker compose exec ibkr-gateway python3 -m ibeam.ibeam_starter --authenticate
 
 # 查看审计日志
 docker compose exec clawtrade cat /app/logs/clawtrade_audit.jsonl
@@ -266,7 +286,7 @@ CONFIRM_THRESHOLD_USD = 200
 建议禁用其他直接连接券商的 Skill（如 ClawHub 上的 ibkr-trader），避免绕过 ClawTrade 的安全层。但这不是强制的——ClawTrade 的安全不依赖于此。
 
 **Q: IBKR Gateway 认证过期怎么办？**
-运行 `docker compose exec ibkr-gateway python3 -m ibeam --authenticate`，然后在手机上确认 IBKR Key 推送。保活脚本会尽量延长 session，但大约 24 小时后仍需重新认证。
+运行 `docker compose exec ibkr-gateway python3 -m ibeam.ibeam_starter --authenticate`，然后在手机上确认 IBKR Key 推送。保活脚本会尽量延长 session，但大约 24 小时后仍需重新认证。
 
 **Q: 如何查看所有历史操作？**
 `docker compose exec clawtrade cat /app/logs/clawtrade_audit.jsonl`。每行一个 JSON 对象，包含时间戳、操作类型、参数、结果、是否被拦截及原因。

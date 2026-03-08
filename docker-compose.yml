@@ -15,7 +15,7 @@ services:
       - ibkr-data:/opt/gateway/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sk", "https://localhost:5000/v1/api/iserver/auth/status"]
+      test: ["CMD", "curl", "-skf", "https://localhost:5000/v1/api/iserver/auth/status"]
       interval: 60s
       timeout: 10s
       retries: 3

@@ -15,12 +15,18 @@ echo ">>> Starting IBeam authentication..."
 echo "    Please confirm the push notification on your IBKR Key mobile app (within 2 minutes)!"
 
 export IBEAM_GATEWAY_DIR=/opt/gateway/clientportal
-export IBEAM_CHROME_DRIVER_PATH=/usr/bin/chromedriver
+export IBEAM_CHROME_DRIVER_PATH=/usr/local/bin/chromedriver
 export IBEAM_TWO_FA_SELECT_TARGET="IB Key"
+export IBEAM_ROUTE_VALIDATE="/v1/api/sso/validate"
+export IBEAM_ROUTE_REAUTHENTICATE="/v1/api/iserver/reauthenticate?force=true"
+export IBEAM_OAUTH_TIMEOUT=120
+export IBEAM_PAGE_LOAD_TIMEOUT=120
+export IBEAM_REAUTHENTICATE_WAIT=30
+export IBEAM_MAX_REAUTHENTICATE_RETRIES=10
 
-python3 -m ibeam --authenticate || {
+python3 -m ibeam.ibeam_starter --authenticate || {
     echo "⚠️  Authentication failed — check credentials or retry"
-    echo "    You can retry later: docker compose exec ibkr-gateway python3 -m ibeam --authenticate"
+    echo "    You can retry later: docker compose exec ibkr-gateway python3 -m ibeam.ibeam_starter --authenticate"
 }
 
 echo ">>> Starting keepalive service..."
